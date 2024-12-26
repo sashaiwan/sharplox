@@ -1,0 +1,57 @@
+program         ::= declaration* EOF ;
+
+declaration     ::= funDecl
+                    |varDecl
+                    | statement ;
+                
+funDecl         ::= "fun" function ;
+function        ::= IDENTIFIER "(" parameters? ")" ;
+parameters      ::= IDENTIFIER ( "," IDENTIFIER )* ; 
+varDecl         ::= "var" IDENTIFIER ( "=" expression )? ";" ;
+
+statement       ::= exprStatement
+                    | forStmt
+                    | ifStmt
+                    | printStatement
+                    | returnStmt
+                    | whileStmt
+                    | breakStmt
+                    | block ;
+
+returnStmt      ::= "return" expression? ";" ;
+forStmt         ::= "for" "(" ( varDecl | exprStatement | ";" )
+                    expression? ";"
+                    expression? ")" statement 
+whileStmt       ::= "while" "(" expression ")" statement ;
+ifStmt          ::= "if" "(" expression ")" statement
+                    ( "else" statement )? ;
+breakStmt       ::= "break" ";" ; 
+block           ::= "{" declaration* "}" ;
+exprStatement   ::= expression ";" ;
+printStatement  ::= "print" expression ";" ;
+                
+expression      ::= assignment ;
+assignment      ::= IDENTIFIER '=' assignment 
+                    | logical_or ; 
+logical_or      ::= logical_and ( "or" logical_and )* ;
+logical_and     ::= conditional ( "and" conditional )* ;
+conditional     ::= comma ( "?" comma ":" comma )? ;
+comma           ::= equality ( "," equality )* ;
+equality        ::= comparison ( ( "!=" | "=" ) comparison )* ;
+comparison      ::= term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
+term            ::= factor ( ( "+" | "-" ) factor )* ;
+factor          ::= unary ( ( "*" | "/" ) unary )* ;
+unary           ::= ( "!" | "-" ) unary
+                    | ( "+" | "-" | "*" | "/" | ">" | ">=" | "<" | "<=" | "=" | "!=" ) equality // error production
+                    | call ;
+call            ::= primary ( "(" arguments ? ")" )* ;
+arguments       ::= expression ( "," expression )* ;
+primary         ::= NUMBER 
+                    | STRING 
+                    | "true" 
+                    | "false" 
+                    | "nil" 
+                    | "(" expression ")" 
+                    | IDENTIFIER
+                    | lambda ;
+lambda          ::= "fun" "(" parameters? ")" block ; 
