@@ -6,6 +6,7 @@ public static class Program
     private static bool _hadError;
     private static bool _hadRuntimeError;
     private static readonly Interpreter Interpreter = new(); 
+    private static readonly List<string> Warnings = [];
     
     public static int Main(string[] args)
     {
@@ -35,11 +36,15 @@ public static class Program
         if (_hadError) return;
 
         var resolver = new Resolver(Interpreter);
+      
         resolver.Resolve(statements!);
         
         if (_hadError) return;
         
         Interpreter.Interpret(statements!);
+        
+        if (Warnings.Count > 0)
+            Warnings.ForEach(Console.WriteLine);
     }
 
     private static void RunFile(string path)
@@ -100,5 +105,10 @@ public static class Program
     {
         Console.Error.WriteLine($"{error.Message}\n[line: {error.Token.Line}]");
         _hadRuntimeError = true;
+    }
+
+    public static void Warning(string message)
+    {
+        Warnings.Add($"Warning: {message}");
     }
 }

@@ -1,6 +1,5 @@
 namespace SharpLox;
 
-
 public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
 {
     private enum FunctionType
@@ -9,7 +8,7 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
         Function,
         Lambda
     }
-    private readonly Stack<Dictionary<string, bool>> _scopes = [];
+    private readonly Stack<Dictionary<string, VariableState>> _scopes = [];
     private FunctionType _currentFunction = FunctionType.None;
     
     public void Resolve(List<Stmt> statements) => statements.ForEach(Resolve);
@@ -41,12 +40,15 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
 
     public void VisitVariableExpr(Variable expr)
     {
-        if (_scopes.Count != 0 && _scopes.Peek().TryGetValue(expr.Name.Lexeme, out bool isDefined))
+        if (_scopes.Count != 0 && _scopes.Peek().TryGetValue(expr.Name.Lexeme, out var variableState))
         {
-            if (!isDefined)
+            if (!variableState.Initialized)
             {
                 Program.Error(expr.Name, "Can't read local variable in its own initializer.");
             }
+            
+            // Mark as used
+            _scopes.Peek()[expr.Name.Lexeme] = variableState.WithUsed();
         }
 
         ResolveLocal(expr, expr.Name);
@@ -168,8 +170,13 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
         _currentFunction = enclosingType;
     }
     private void BeginScope() => _scopes.Push([]);
-    private void EndScope() => _scopes.Pop();
-    private void Declare(Token name)
+    
+    private void EndScope()
+    {
+        EnsureVariableUsage();
+        _scopes.Pop();
+    }
+    private void Declare(Token name, bool parameter = false, bool synthetic = false)
     {
         if (_scopes.Count == 0)
             return;
@@ -179,25 +186,50 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
         {
             Program.Error(name, "Already a variable with this name in this scope.");
         }
-        
-        scope[name.Lexeme] = false;
+
+        var state = (parameter, synthetic) switch
+        {
+            (true, _) => VariableState.CreateParameter(name),
+            (_, true) => VariableState.CreateSynthetic(name),
+            _ => VariableState.CreateDeclared(name)
+        };
+
+        scope[name.Lexeme] = state;
     }
     private void Define(Token name)
     {
         if (_scopes.Count == 0)
             return;
-        _scopes.Peek()[name.Lexeme] = true;
+        var scope = _scopes.Peek();
+        var currentState = scope[name.Lexeme];
+        scope[name.Lexeme] = currentState.WithInitialized();
     }
     private void ResolveLocal(Expr expr, Token name)
     {
-        for (var i = 0; i < _scopes.Count; i++)  // Changed direction
+        for (var i = 0; i < _scopes.Count; i++)
         {
             var scope = _scopes.ElementAt(i);
             if (scope.ContainsKey(name.Lexeme))
             {
-                interpreter.Resolve(expr, i);  // Use i directly
+                interpreter.Resolve(expr, i);
                 return;
             }
+        }
+    }
+
+    private void EnsureVariableUsage()
+    {
+        var currentScope = _scopes.Peek();
+
+        var unusedVars = currentScope
+            .Where(v => v.Value is { Parameter: false, Synthetic: false })
+            .Where(v => v.Value is { Initialized: true, Used: false })
+            .ToList();
+        
+        if (unusedVars.Count != 0)
+        {
+            unusedVars.ForEach(v 
+                => Program.Warning($"[line {v.Value.DeclarationToken.Line}] Variable {v.Key} is never used."));
         }
     }
 }
