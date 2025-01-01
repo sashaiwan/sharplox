@@ -8,7 +8,7 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
         Function,
         Lambda
     }
-    private readonly Stack<Dictionary<string, VariableState>> _scopes = [];
+    private readonly Stack<(Dictionary<string, VariableState> Scope, int Count)> _scopes = [];
     private FunctionType _currentFunction = FunctionType.None;
     
     public void Resolve(List<Stmt> statements) => statements.ForEach(Resolve);
@@ -16,6 +16,8 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
     {
         BeginScope();
         Resolve(stmt.Statements!);
+        var scopeSize = _scopes.Peek().Count;
+        interpreter.BeginScope(scopeSize);
         EndScope();
     }
 
@@ -40,7 +42,7 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
 
     public void VisitVariableExpr(Variable expr)
     {
-        if (_scopes.Count != 0 && _scopes.Peek().TryGetValue(expr.Name.Lexeme, out var variableState))
+        if (_scopes.Count != 0 && _scopes.Peek().Scope.TryGetValue(expr.Name.Lexeme, out var variableState))
         {
             if (!variableState.Initialized)
             {
@@ -48,7 +50,7 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
             }
             
             // Mark as used
-            _scopes.Peek()[expr.Name.Lexeme] = variableState.WithUsed();
+            _scopes.Peek().Scope[expr.Name.Lexeme] = variableState.WithUsed();
         }
 
         ResolveLocal(expr, expr.Name);
@@ -169,7 +171,7 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
         
         _currentFunction = enclosingType;
     }
-    private void BeginScope() => _scopes.Push([]);
+    private void BeginScope() => _scopes.Push(([], 0));
     
     private void EndScope()
     {
@@ -181,7 +183,7 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
         if (_scopes.Count == 0)
             return;
         
-        var scope = _scopes.Peek();
+        var (scope, count) = _scopes.Peek();
         if (scope.ContainsKey(name.Lexeme))
         {
             Program.Error(name, "Already a variable with this name in this scope.");
@@ -189,18 +191,20 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
 
         var state = (parameter, synthetic) switch
         {
-            (true, _) => VariableState.CreateParameter(name),
-            (_, true) => VariableState.CreateSynthetic(name),
-            _ => VariableState.CreateDeclared(name)
+            (true, _) => VariableState.CreateParameter(name, count),
+            (_, true) => VariableState.CreateSynthetic(name, count),
+            _ => VariableState.CreateDeclared(name, count)
         };
 
         scope[name.Lexeme] = state;
+        
+        UpdateCount(scope, count);
     }
     private void Define(Token name)
     {
         if (_scopes.Count == 0)
             return;
-        var scope = _scopes.Peek();
+        var scope = _scopes.Peek().Scope;
         var currentState = scope[name.Lexeme];
         scope[name.Lexeme] = currentState.WithInitialized();
     }
@@ -208,18 +212,22 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
     {
         for (var i = 0; i < _scopes.Count; i++)
         {
-            var scope = _scopes.ElementAt(i);
-            if (scope.ContainsKey(name.Lexeme))
+            var scope = _scopes.ElementAt(i).Scope;
+            if (scope.TryGetValue(name.Lexeme, out var state))
             {
-                interpreter.Resolve(expr, i);
+                interpreter.Resolve(expr, i, state.Index);
                 return;
             }
         }
     }
-
+    private void UpdateCount(Dictionary<string, VariableState> currentScope, int count)
+    {
+        _scopes.Pop();
+        _scopes.Push((currentScope, count + 1));
+    }
     private void EnsureVariableUsage()
     {
-        var currentScope = _scopes.Peek();
+        var currentScope = _scopes.Peek().Scope;
 
         var unusedVars = currentScope
             .Where(v => v.Value is { Parameter: false, Synthetic: false })

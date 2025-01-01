@@ -4,7 +4,7 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
 {
     private static readonly LoxEnvironment GlobalEnvironment = new ();
     private LoxEnvironment _environment = GlobalEnvironment;
-    private readonly Dictionary<Expr, int> _locals = [];
+    private readonly Dictionary<Expr, (int depth, int index)> _locals = [];
 
     public Interpreter()
     {
@@ -120,9 +120,9 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
 
     private object LookupVariable(Token name, Expr expr)
     {
-        if (_locals.TryGetValue(expr, out var distance))
+        if (_locals.TryGetValue(expr, out var location))
         {
-            return _environment.GetAt(distance, name.Lexeme);
+            return _environment.GetAt(location.depth, location.index);
         }
     
         return GlobalEnvironment.Get(name)!;
@@ -162,11 +162,11 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
 
     public void VisitBlockStmt(Block stmt)
     {
-        var blockEnv = new LoxEnvironment(_environment);
+        // var blockEnv = new LoxEnvironment(size: count, _environment);
         var previousEnv = _environment;
         try
         {
-            _environment = blockEnv;
+            // _environment = blockEnv;
             foreach (var statement in stmt.Statements.OfType<Stmt>())
             {
                 Execute(statement);
@@ -209,9 +209,9 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
     {
         var valueObj = Evaluate(expr.Value);
 
-        if (_locals.TryGetValue(expr, out var distance))
+        if (_locals.TryGetValue(expr, out var location))
         {
-            _environment.AssignAt(distance, expr.Name, valueObj);
+            _environment.AssignAt(location.depth, location.index, valueObj);
         }
         else
         {
@@ -280,10 +280,12 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
         stmt.Accept(this);   
     }
     
-    public void Resolve(Expr expr, int depth)
+    public void Resolve(Expr expr, int depth, int index)
     {
-        _locals[expr] = depth;
+        _locals[expr] = (depth, index);
     }
+    
+    public void BeginScope(int size) => _environment = new LoxEnvironment(size, _environment); 
     
     public void ExecuteBlock(List<Stmt?> statements, LoxEnvironment environment)
     {

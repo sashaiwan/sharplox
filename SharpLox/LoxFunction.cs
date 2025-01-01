@@ -5,11 +5,11 @@ public class LoxFunction(string? name, Lambda declaration, LoxEnvironment closur
     public int Arity { get; } = declaration.Parameters.Count;
     public object Call(Interpreter interpreter, List<object> arguments)
     {
-        var environment = new LoxEnvironment(closure);
+        var environment = new LoxEnvironment(size: declaration.Parameters.Count, closure);
         
         for (var i = 0; i < declaration.Parameters.Count; i++)
         {
-            environment.Define(declaration.Parameters[i].Lexeme, arguments[i]);
+            environment.Define(i, arguments[i]);
         }
 
         try
