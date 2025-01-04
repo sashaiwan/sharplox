@@ -23,6 +23,7 @@ public static class AstDefinitions
         Stmt
             Block       : List<Stmt?> Statements
             Break       : Token Keyword
+            Class       : Token Name, List<Function> Methods
             Expression  : Expr Expr
             Function    : Token Name, Lambda FunctionExpr
             If          : Expr Condition, Stmt ThenBranch, Stmt ElseBranch

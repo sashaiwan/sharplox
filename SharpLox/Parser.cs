@@ -2,6 +2,12 @@ namespace SharpLox;
 
 internal class ParserError : Exception;
 
+public enum FunctionType
+{
+    Function,
+    Method
+}
+
 public sealed class Parser(List<Token> tokens)
 {
     
@@ -31,10 +37,11 @@ public sealed class Parser(List<Token> tokens)
     {
         try
         {
+            if (Match(TokenType.Class)) return ClassDeclaration();
             if (Check(TokenType.Fun) && CheckNext(TokenType.Identifier))
             {
                 Consume(TokenType.Fun, string.Empty);
-                return Function(TokenType.Fun);
+                return Function(FunctionType.Function);
             }
             if (Match(TokenType.Var))
                 return VarDeclaration();
@@ -47,9 +54,25 @@ public sealed class Parser(List<Token> tokens)
         }
     }
 
-    private Function Function(TokenType type)
+    private Class ClassDeclaration()
     {
-        var kind = type == TokenType.Fun ? "function" : "method";
+        var nameToken = Consume(TokenType.Identifier, "Expect class name.");
+        Consume(TokenType.LeftBrace, "Expect '{' before class body.");
+
+        List<Function> methods = [];
+        while (!Check(TokenType.RightBrace) && !IsAtEnd())
+        {
+            methods.Add(Function(FunctionType.Method));            
+        }
+        
+        Consume(TokenType.RightBrace, "Expect '}' after class body.");
+        return new Class(nameToken, methods);
+    }
+    
+    private Function Function(FunctionType type)
+    {
+        // TODO: find a better way
+        var kind = type == FunctionType.Function ? "function" : "method";
         var nameToken = Consume(TokenType.Identifier, $"Expect {kind} name.");
         return new Function(nameToken, FunctionBody(kind));
     }

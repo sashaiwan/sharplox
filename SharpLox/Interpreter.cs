@@ -183,6 +183,13 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
         throw new BreakException();
     }
 
+    public void VisitClassStmt(Class stmt)
+    {
+        _environment.Define(stmt.Name.Lexeme, null);
+        LoxClass klass = new LoxClass(stmt.Name.Lexeme);
+        _environment.Assign(stmt.Name, klass);
+    }
+
     public void VisitExpressionStmt(Expression stmt) => Evaluate(stmt.Expr);
     public void VisitFunctionStmt(Function stmt)
     {

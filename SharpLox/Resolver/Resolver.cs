@@ -1,6 +1,6 @@
 namespace SharpLox;
 
-public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
+public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
 {
     private enum FunctionType
     {
@@ -24,6 +24,12 @@ public class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisitor
     public void VisitBreakStmt(Break stmt)
     {
         // Nothing to resolve yet
+    }
+
+    public void VisitClassStmt(Class stmt)
+    {
+        Declare(stmt.Name);
+        Define(stmt.Name);
     }
 
     public void VisitVarStmt(Var stmt)
