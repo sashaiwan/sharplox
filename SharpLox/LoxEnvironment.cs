@@ -1,34 +1,25 @@
 namespace SharpLox;
 
-public sealed class LoxEnvironment
+public sealed class LoxEnvironment(LoxEnvironment? enclosing)
 {
-    private LoxEnvironment? Enclosing { get; }
-    private readonly (object? Value, bool Initialized)[] _locals;
-    private readonly Dictionary<string, (object? Value, bool Initialized)> _globals;
+    private LoxEnvironment? Enclosing { get; } = enclosing;
+    private readonly Dictionary<string, (object? Value, bool Initialized)> _values = [];
 
     // Constructor for global environment
-    public LoxEnvironment()
+    public LoxEnvironment() : this(null)
     {
-        _locals = [];
-        _globals = new Dictionary<string, (object?, bool)>();
-        Enclosing = null;
     }
 
-    // Constructor for local scopes
-    public LoxEnvironment(int size, LoxEnvironment? enclosing)
+    public void Define(string name, object? value, bool initialized = true)
     {
-        _locals = new (object? Value, bool Initialized)[size];
-        _globals = new Dictionary<string, (object?, bool)>();
-        Enclosing = enclosing;
+        _values[name] = (value, initialized);
     }
     
-    public void Define(int index, object? value, bool initialized = true)
+    public object GetAt(int distance, string name)
     {
-        if (index < _locals.Length)
-            _locals[index] = (value, initialized);
+        var env = Ancestor(distance);
+        return env._values[name].Value!;
     }
-
-    public object GetAt(int depth, int index) => Ancestor(depth)._locals[index].Value!;
     
     private LoxEnvironment Ancestor(int distance)
     {
@@ -40,19 +31,17 @@ public sealed class LoxEnvironment
         return environment;
     }
 
-    public void AssignAt(int depth, int index, object value)
-        => Ancestor(depth)._locals[index] = (value, true);
-    
-    // For globals
-    public void Define(string name, object? value, bool initialized = true)
+    public void AssignAt(int distance, Token name, object value)
     {
-        _globals[name] = (value, initialized);
+        if (Ancestor(distance)._values.TryGetValue(name.Lexeme, out _))
+        {
+            Ancestor(distance)._values[name.Lexeme] = (value, true);
+        }
     }
     
-    // For globals
     public object? Get(Token name)
     {
-        if (_globals.TryGetValue(name.Lexeme, out var entry))
+        if (_values.TryGetValue(name.Lexeme, out var entry))
         {
             if (!entry.Initialized)
                 throw new RuntimeError(name, $"Variable '{name.Lexeme}' is not initialized.");
@@ -65,12 +54,12 @@ public sealed class LoxEnvironment
         
         return Enclosing.Get(name);
     }
-    // For globals
+    
     public void Assign(Token name, object value)
     {
-        if (_globals.ContainsKey(name.Lexeme))
+        if (_values.ContainsKey(name.Lexeme))
         {
-             _globals[name.Lexeme] = (value, true);
+             _values[name.Lexeme] = (value, true);
              return;
         }
 

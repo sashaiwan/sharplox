@@ -4,29 +4,27 @@ internal readonly struct VariableState
 {
     private readonly StateFlags _state;
     public Token DeclarationToken { get; }
-    public int Index { get; }
     
-    private VariableState(StateFlags state, Token token, int index)
+    private VariableState(StateFlags state, Token token)
     {
         _state = state;
         DeclarationToken = token;
-        Index = index;
     }
     
-    public static VariableState CreateDeclared(Token token, int index) => 
-        new(StateFlags.Declared, token, index);
+    public static VariableState CreateDeclared(Token token) => 
+        new(StateFlags.Declared, token);
 
-    public static VariableState CreateParameter(Token token, int index) => 
-        new(StateFlags.Declared | StateFlags.Initialized, token, index);
+    public static VariableState CreateParameter(Token token) => 
+        new(StateFlags.Declared | StateFlags.Initialized, token);
 
-    public static VariableState CreateSynthetic(Token token, int index) => 
-        new(StateFlags.Declared | StateFlags.Initialized | StateFlags.Synthetic, token, index);
+    public static VariableState CreateSynthetic(Token token) => 
+        new(StateFlags.Declared | StateFlags.Initialized | StateFlags.Synthetic, token);
     
     public VariableState WithInitialized() => 
-        new(_state | StateFlags.Initialized, DeclarationToken, Index);
+        new(_state | StateFlags.Initialized, DeclarationToken);
         
     public VariableState WithUsed() => 
-        new(_state | StateFlags.Used, DeclarationToken, Index);
+        new(_state | StateFlags.Used, DeclarationToken);
     
     public bool Declared => _state.HasFlag(StateFlags.Declared);
     public bool Initialized => _state.HasFlag(StateFlags.Initialized);

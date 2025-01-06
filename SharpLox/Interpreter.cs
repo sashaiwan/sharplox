@@ -4,7 +4,7 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
 {
     private static readonly LoxEnvironment GlobalEnvironment = new ();
     private LoxEnvironment _environment = GlobalEnvironment;
-    private readonly Dictionary<Expr, (int depth, int index)> _locals = [];
+    private readonly Dictionary<Expr, int> _locals = [];
 
     public Interpreter()
     {
@@ -71,6 +71,26 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
         return Evaluate(expr.Right);
     }
 
+    public object VisitSetExpr(Set expr)
+    {
+        var obj = Evaluate(expr.Object);
+
+        if (obj is not LoxInstance instance)
+        {
+            throw new RuntimeError(expr.Name, "Only instances have fields.");
+        }
+        
+        var valueObj = Evaluate(expr.Value);
+        instance.Set(expr.Name, valueObj);
+
+        return valueObj;
+    }
+
+    public object VisitThisExpr(This expr)
+    {
+        return LookupVariable(expr.Keyword, expr);
+    }
+
     public object VisitCallExpr(Call expr)
     {
         var calleeObj = Evaluate(expr.Callee);
@@ -82,8 +102,19 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
 
         if (arguments.Count != function.Arity)  // Then check arity
             throw new RuntimeError(expr.Paren, $"Expected {function.Arity} but got {arguments.Count}.");
-    
+        
         return function.Call(this, arguments);
+    }
+
+    public object VisitGetExpr(Get expr)
+    {
+        var obj = Evaluate(expr.Object);
+        if (obj is LoxInstance instance)
+        {
+            return instance.Get(expr.Name);
+        }
+        
+        throw new RuntimeError(expr.Name, "Only instances have properties.");
     }
 
     public object VisitGroupingExpr(Grouping grouping) => Evaluate(grouping.Expression);
@@ -122,7 +153,7 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
     {
         if (_locals.TryGetValue(expr, out var location))
         {
-            return _environment.GetAt(location.depth, location.index);
+            return _environment.GetAt(location, name.Lexeme);
         }
     
         return GlobalEnvironment.Get(name)!;
@@ -186,7 +217,16 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
     public void VisitClassStmt(Class stmt)
     {
         _environment.Define(stmt.Name.Lexeme, null);
-        LoxClass klass = new LoxClass(stmt.Name.Lexeme);
+
+        Dictionary<string, LoxFunction> methods = [];
+        foreach (var method in stmt.Methods)
+        {
+            var function = new LoxFunction(null, method.FunctionExpr, _environment);
+            methods[method.Name.Lexeme] = function;
+        }
+        
+        var klass = new LoxClass(stmt.Name.Lexeme, methods);
+        
         _environment.Assign(stmt.Name, klass);
     }
 
@@ -218,7 +258,7 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
 
         if (_locals.TryGetValue(expr, out var location))
         {
-            _environment.AssignAt(location.depth, location.index, valueObj);
+            _environment.AssignAt(location, expr.Name, valueObj);
         }
         else
         {
@@ -287,12 +327,12 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
         stmt.Accept(this);   
     }
     
-    public void Resolve(Expr expr, int depth, int index)
+    public void Resolve(Expr expr, int depth)
     {
-        _locals[expr] = (depth, index);
+        _locals[expr] = depth;
     }
     
-    public void BeginScope(int size) => _environment = new LoxEnvironment(size, _environment); 
+    public void BeginScope(int size) => _environment = new LoxEnvironment(_environment); 
     
     public void ExecuteBlock(List<Stmt?> statements, LoxEnvironment environment)
     {

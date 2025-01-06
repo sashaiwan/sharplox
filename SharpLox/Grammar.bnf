@@ -33,7 +33,7 @@ exprStatement   ::= expression ";" ;
 printStatement  ::= "print" expression ";" ;
                 
 expression      ::= assignment ;
-assignment      ::= IDENTIFIER '=' assignment 
+assignment      ::= ( call "." )? IDENTIFIER '=' assignment 
                     | logical_or ; 
 logical_or      ::= logical_and ( "or" logical_and )* ;
 logical_and     ::= conditional ( "and" conditional )* ;
@@ -46,7 +46,7 @@ factor          ::= unary ( ( "*" | "/" ) unary )* ;
 unary           ::= ( "!" | "-" ) unary
                     | ( "+" | "-" | "*" | "/" | ">" | ">=" | "<" | "<=" | "=" | "!=" ) equality // error production
                     | call ;
-call            ::= primary ( "(" arguments ? ")" )* ;
+call            ::= primary ( "(" arguments ? ")" | "." IDENTIFIER )* ;
 arguments       ::= expression ( "," expression )* ;
 primary         ::= NUMBER 
                     | STRING 

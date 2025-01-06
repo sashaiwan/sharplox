@@ -6,9 +6,18 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
     {
         None,
         Function,
-        Lambda
+        Lambda,
+        Method
     }
-    private readonly Stack<(Dictionary<string, VariableState> Scope, int Count)> _scopes = [];
+
+    private enum ClassType
+    {
+        None,
+        Class
+    }
+    
+    private ClassType _currentClass = ClassType.None;
+    private readonly Stack<Dictionary<string, VariableState>> _scopes = [];
     private FunctionType _currentFunction = FunctionType.None;
     
     public void Resolve(List<Stmt> statements) => statements.ForEach(Resolve);
@@ -28,8 +37,32 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
 
     public void VisitClassStmt(Class stmt)
     {
+        var enclosingClass = _currentClass;
+        _currentClass = ClassType.Class;
+        
         Declare(stmt.Name);
         Define(stmt.Name);
+        
+        // Add 'this' to the class scope
+        BeginScope();
+        var scope = _scopes.Peek();
+
+        var thisToken = new Token(
+            TokenType.This,
+            "this",
+            null,
+            stmt.Name.Line
+        );
+        var state = VariableState.CreateSynthetic(thisToken);
+        scope["this"] = state;
+        
+        foreach (var method in stmt.Methods)
+        {
+            ResolveFunction(method, FunctionType.Method);
+        }
+        
+        EndScope();
+        _currentClass = enclosingClass;
     }
 
     public void VisitVarStmt(Var stmt)
@@ -48,7 +81,7 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
 
     public void VisitVariableExpr(Variable expr)
     {
-        if (_scopes.Count != 0 && _scopes.Peek().Scope.TryGetValue(expr.Name.Lexeme, out var variableState))
+        if (_scopes.Count != 0 && _scopes.Peek().TryGetValue(expr.Name.Lexeme, out var variableState))
         {
             if (!variableState.Initialized)
             {
@@ -56,7 +89,7 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
             }
             
             // Mark as used
-            _scopes.Peek().Scope[expr.Name.Lexeme] = variableState.WithUsed();
+            _scopes.Peek()[expr.Name.Lexeme] = variableState.WithUsed();
         }
 
         ResolveLocal(expr, expr.Name);
@@ -122,6 +155,8 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
         }
     }
 
+    public void VisitGetExpr(Get expr) => Resolve(expr.Object);
+
     public void VisitGroupingExpr(Grouping stmt) => Resolve(stmt.Expression);
 
     public void VisitLiteralExpr(Literal expr)
@@ -134,7 +169,23 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
         Resolve(expr.Left);
         Resolve(expr.Right);
     }
-    
+
+    public void VisitSetExpr(Set expr)
+    {
+        Resolve(expr.Value);
+        Resolve(expr.Object);
+    }
+
+    public void VisitThisExpr(This expr)
+    {
+        if (_currentClass == ClassType.None)
+        {
+            Program.Error(expr.Keyword, "Can't use 'this' outside of a class.");
+            return;
+        }
+        ResolveLocal(expr, expr.Keyword);
+    }
+
     public void VisitUnaryExpr(Unary expr) => Resolve(expr.Right);
     public void VisitConditionalExpr(Conditional expr)
     {
@@ -177,7 +228,7 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
         
         _currentFunction = enclosingType;
     }
-    private void BeginScope() => _scopes.Push(([], 0));
+    private void BeginScope() => _scopes.Push([]);
     
     private void EndScope()
     {
@@ -189,7 +240,7 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
         if (_scopes.Count == 0)
             return;
         
-        var (scope, count) = _scopes.Peek();
+        var scope = _scopes.Peek();
         if (scope.ContainsKey(name.Lexeme))
         {
             Program.Error(name, "Already a variable with this name in this scope.");
@@ -197,20 +248,18 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
 
         var state = (parameter, synthetic) switch
         {
-            (true, _) => VariableState.CreateParameter(name, count),
-            (_, true) => VariableState.CreateSynthetic(name, count),
-            _ => VariableState.CreateDeclared(name, count)
+            (true, _) => VariableState.CreateParameter(name),
+            (_, true) => VariableState.CreateSynthetic(name),
+            _ => VariableState.CreateDeclared(name)
         };
 
         scope[name.Lexeme] = state;
-        
-        UpdateCount(scope, count);
     }
     private void Define(Token name)
     {
         if (_scopes.Count == 0)
             return;
-        var scope = _scopes.Peek().Scope;
+        var scope = _scopes.Peek();
         var currentState = scope[name.Lexeme];
         scope[name.Lexeme] = currentState.WithInitialized();
     }
@@ -218,22 +267,18 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
     {
         for (var i = 0; i < _scopes.Count; i++)
         {
-            var scope = _scopes.ElementAt(i).Scope;
+            var scope = _scopes.ElementAt(i);
             if (scope.TryGetValue(name.Lexeme, out var state))
             {
-                interpreter.Resolve(expr, i, state.Index);
+                interpreter.Resolve(expr, i);
                 return;
             }
         }
     }
-    private void UpdateCount(Dictionary<string, VariableState> currentScope, int count)
-    {
-        _scopes.Pop();
-        _scopes.Push((currentScope, count + 1));
-    }
+    
     private void EnsureVariableUsage()
     {
-        var currentScope = _scopes.Peek().Scope;
+        var currentScope = _scopes.Peek();
 
         var unusedVars = currentScope
             .Where(v => v.Value is { Parameter: false, Synthetic: false })

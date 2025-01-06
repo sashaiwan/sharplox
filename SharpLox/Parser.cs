@@ -251,13 +251,19 @@ public sealed class Parser(List<Token> tokens)
             var equalsToken = Previous();
             var value = Assignment();
             
-            if (expr is Variable variable)
+            switch (expr)
             {
-                var nameToken = variable.Name;
-                return new Assign(nameToken, value);
+                case Variable variable:
+                {
+                    var nameToken = variable.Name;
+                    return new Assign(nameToken, value);
+                }
+                case Get getter:
+                    return new Set(getter.Object, getter.Name, value);
+                default:
+                    Error(equalsToken, "Invalid assignment.");
+                    break;
             }
-            
-            Error(equalsToken, "Invalid assignment.");
         }
         
         return expr;
@@ -396,6 +402,11 @@ public sealed class Parser(List<Token> tokens)
         {
             if (Match(TokenType.LeftParen))
                 expr = FinishCall(expr);
+            else if (Match(TokenType.Dot))
+            {
+                var nameToken = Consume(TokenType.Identifier, "Expect property name after '.'.");
+                expr = new Get(expr, nameToken);
+            }
             else
                 break;
         }
@@ -412,6 +423,8 @@ public sealed class Parser(List<Token> tokens)
         
         if (Match(TokenType.Number, TokenType.String))
             return new Literal(Previous().Literal);
+
+        if (Match(TokenType.This)) return new This(Previous());
         
         if (Match(TokenType.Identifier))
             return new Variable(Previous());
