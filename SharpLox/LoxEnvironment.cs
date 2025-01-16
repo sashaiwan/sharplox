@@ -2,7 +2,7 @@ namespace SharpLox;
 
 public sealed class LoxEnvironment(LoxEnvironment? enclosing)
 {
-    private LoxEnvironment? Enclosing { get; } = enclosing;
+    public LoxEnvironment? Enclosing { get; } = enclosing;
     private readonly Dictionary<string, (object? Value, bool Initialized)> _values = [];
 
     // Constructor for global environment

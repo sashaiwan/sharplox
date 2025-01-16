@@ -57,6 +57,13 @@ public sealed class Parser(List<Token> tokens)
     private Class ClassDeclaration()
     {
         var nameToken = Consume(TokenType.Identifier, "Expect class name.");
+        Variable? superclass = null;
+        if (Match(TokenType.Less))
+        {
+            Consume(TokenType.Identifier, "Expect class superclass name.");
+            superclass = new Variable(Previous());
+        }
+        
         Consume(TokenType.LeftBrace, "Expect '{' before class body.");
 
         List<Function> methods = [];
@@ -66,7 +73,7 @@ public sealed class Parser(List<Token> tokens)
         }
         
         Consume(TokenType.RightBrace, "Expect '}' after class body.");
-        return new Class(nameToken, methods);
+        return new Class(nameToken, superclass, methods);
     }
     
     private Function Function(FunctionType type)
@@ -424,6 +431,15 @@ public sealed class Parser(List<Token> tokens)
         if (Match(TokenType.Number, TokenType.String))
             return new Literal(Previous().Literal);
 
+        if (Match(TokenType.Super))
+        {
+            var keywordToken = Previous();
+            Consume(TokenType.Dot, "Expect '.' after 'super'.");
+            var methodToken = Consume(TokenType.Identifier, "Expect superclass method name.");
+            
+            return new Super(keywordToken, methodToken);
+        }
+        
         if (Match(TokenType.This)) return new This(Previous());
         
         if (Match(TokenType.Identifier))

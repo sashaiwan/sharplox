@@ -7,13 +7,15 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
         None,
         Function,
         Lambda,
-        Method
+        Method,
+        Initializer
     }
 
     private enum ClassType
     {
         None,
-        Class
+        Class,
+        SubClass,
     }
     
     private ClassType _currentClass = ClassType.None;
@@ -39,10 +41,25 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
     {
         var enclosingClass = _currentClass;
         _currentClass = ClassType.Class;
-        
+
         Declare(stmt.Name);
         Define(stmt.Name);
-        
+
+        if (stmt.Superclass != null && stmt.Name.Lexeme.Equals(stmt.Superclass.Name.Lexeme))
+            Program.Error(stmt.Superclass.Name, "A class can't inherit from itself.");
+
+        if (stmt.Superclass != null)
+        {
+            _currentClass = ClassType.SubClass;
+            Resolve(stmt.Superclass);
+        }
+
+        if (stmt.Superclass != null)
+        {
+            BeginScope();
+            _scopes.Peek()["super"] = VariableState.CreateSynthetic(stmt.Superclass.Name);
+        }
+
         // Add 'this' to the class scope
         BeginScope();
         var scope = _scopes.Peek();
@@ -58,8 +75,14 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
         
         foreach (var method in stmt.Methods)
         {
-            ResolveFunction(method, FunctionType.Method);
+            var declaration = FunctionType.Method;
+            if (method.Name.Lexeme.Equals("init"))
+                declaration = FunctionType.Initializer;
+            ResolveFunction(method, declaration);
         }
+        
+        if (stmt.Superclass != null)
+            EndScope();
         
         EndScope();
         _currentClass = enclosingClass;
@@ -128,9 +151,14 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
         if (_currentFunction == FunctionType.None) {
             Program.Error(stmt.Keyword, "Can't return from top-level code.");
         }
-        
+
         if (stmt.Value != null)
+        {
+            if (_currentFunction == FunctionType.Initializer)
+                Program.Error(stmt.Keyword, "Can't return a value from an initializer.");
+            
             Resolve(stmt.Value);
+        }
     }
 
     public void VisitWhileStmt(While stmt)
@@ -174,6 +202,20 @@ public sealed class Resolver(Interpreter interpreter) : IStmtVisitor, IExprVisit
     {
         Resolve(expr.Value);
         Resolve(expr.Object);
+    }
+
+    public void VisitSuperExpr(Super expr)
+    {
+        if (_currentClass == ClassType.None)
+        {
+            Program.Error(expr.Keyword, "Can't user 'super' outside of a class.");
+        }
+        else if (_currentClass != ClassType.SubClass)
+        {
+            Program.Error(expr.Keyword, "Can't user 'super' in a class with no superclass.");
+        }
+        
+        ResolveLocal(expr, expr.Keyword);
     }
 
     public void VisitThisExpr(This expr)

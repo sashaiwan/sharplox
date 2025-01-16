@@ -1,8 +1,9 @@
 namespace SharpLox;
 
-public class LoxFunction(string? name, Lambda declaration, LoxEnvironment closure) : ILoxCallable
+public class LoxFunction(string? name, Lambda declaration, LoxEnvironment closure, bool isInitializer) : ILoxCallable
 {
-    public int Arity { get; } = declaration.Parameters.Count;
+    private readonly bool _isInitializer = isInitializer;
+    public int Arity() => declaration.Parameters.Count;
     public object Call(Interpreter interpreter, List<object> arguments)
     {
         var environment = new LoxEnvironment(closure);
@@ -18,9 +19,14 @@ public class LoxFunction(string? name, Lambda declaration, LoxEnvironment closur
         }
         catch (ReturnException e)
         {
+            if (_isInitializer)
+                return closure.GetAt(0, "this");
+            
             return e.Value!;
         }
 
+        if (_isInitializer) return closure.GetAt(0, "this");   
+        
         return null!;
     }
 
@@ -28,7 +34,7 @@ public class LoxFunction(string? name, Lambda declaration, LoxEnvironment closur
     {
         var environment = new LoxEnvironment(closure);
         environment.Define("this", instance);
-        return new LoxFunction(null, declaration, environment);
+        return new LoxFunction(null, declaration, environment, _isInitializer);
     }
     
     public override string ToString() => name is not null ? $"<fn {name}>" : "<fn>";

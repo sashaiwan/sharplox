@@ -51,7 +51,7 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
 
     public object VisitLambdaExpr(Lambda expr)
     {
-        return new LoxFunction(null, expr, _environment);
+        return new LoxFunction(null, expr, _environment, false);
     }
 
     public object VisitLiteralExpr(Literal literal) => literal.Value;
@@ -86,6 +86,20 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
         return valueObj;
     }
 
+    public object VisitSuperExpr(Super expr)
+    {
+        var distance = _locals[expr];
+        var superclass = (LoxClass)_environment.GetAt(distance, "super");
+        
+        var instance = (LoxInstance)_environment.GetAt(distance - 1, "this");
+        var method = superclass.FindMethod(expr.Method.Lexeme);
+
+        if (method == null)
+            throw new RuntimeError(expr.Method, $"Undefined property '{expr.Method.Lexeme}'.");
+        
+        return method.Bind(instance);
+    }
+
     public object VisitThisExpr(This expr)
     {
         return LookupVariable(expr.Keyword, expr);
@@ -100,8 +114,8 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
     
         var arguments = expr.Arguments.Select(Evaluate).ToList();
 
-        if (arguments.Count != function.Arity)  // Then check arity
-            throw new RuntimeError(expr.Paren, $"Expected {function.Arity} but got {arguments.Count}.");
+        if (arguments.Count != function.Arity())  // Then check arity
+            throw new RuntimeError(expr.Paren, $"Expected {function.Arity()} but got {arguments.Count}.");
         
         return function.Call(this, arguments);
     }
@@ -216,16 +230,40 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
 
     public void VisitClassStmt(Class stmt)
     {
+        object? superclass = null;
+        if (stmt.Superclass != null)
+        {
+            superclass = Evaluate(stmt.Superclass);
+            if (superclass is not LoxClass _)
+            {
+                throw new RuntimeError(stmt.Superclass.Name, "Superclass must be a class.");
+            }
+        }
         _environment.Define(stmt.Name.Lexeme, null);
 
+        if (stmt.Superclass != null)
+        {
+            _environment = new LoxEnvironment(_environment);
+            _environment.Define("super", superclass);
+        }
+        
         Dictionary<string, LoxFunction> methods = [];
         foreach (var method in stmt.Methods)
         {
-            var function = new LoxFunction(null, method.FunctionExpr, _environment);
+            var function = new LoxFunction(
+                null, 
+                method.FunctionExpr, 
+                _environment, 
+                method.Name.Lexeme.Equals("init")
+            );
             methods[method.Name.Lexeme] = function;
         }
         
-        var klass = new LoxClass(stmt.Name.Lexeme, methods);
+        var klass = new LoxClass(stmt.Name.Lexeme, (LoxClass?)superclass, methods);
+
+        if (superclass != null)
+            // We can safely supress null with '!' since the resolver did the check before
+            _environment = _environment.Enclosing!;
         
         _environment.Assign(stmt.Name, klass);
     }
@@ -234,7 +272,7 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
     public void VisitFunctionStmt(Function stmt)
     {
         var functionName = stmt.Name.Lexeme;
-        var loxFunction = new LoxFunction(functionName, stmt.FunctionExpr, _environment);
+        var loxFunction = new LoxFunction(functionName, stmt.FunctionExpr, _environment, false);
         _environment.Define(stmt.Name.Lexeme, loxFunction);
     }
 

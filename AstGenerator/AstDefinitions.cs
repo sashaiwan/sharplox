@@ -16,6 +16,7 @@ public static class AstDefinitions
             Literal     : object Value
             Logical     : Expr Left, Token Operator, Expr Right
             Set         : Expr Object, Token Name, Expr Value
+            Super       : Token Keyword, Token Method
             This        : Token Keyword
             Unary       : Token Operator, Expr Right
             Variable    : Token Name
@@ -26,7 +27,7 @@ public static class AstDefinitions
         Stmt
             Block       : List<Stmt?> Statements
             Break       : Token Keyword
-            Class       : Token Name, List<Function> Methods
+            Class       : Token Name, Variable Superclass, List<Function> Methods
             Expression  : Expr Expr
             Function    : Token Name, Lambda FunctionExpr
             If          : Expr Condition, Stmt ThenBranch, Stmt ElseBranch

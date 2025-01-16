@@ -2,6 +2,6 @@ namespace SharpLox;
 
 public interface ILoxCallable
 {
-    int Arity { get; }
+    int Arity();
     object Call(Interpreter interpreter, List<object> arguments);
 }
