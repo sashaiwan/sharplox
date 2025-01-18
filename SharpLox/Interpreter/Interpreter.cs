@@ -169,8 +169,7 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
         {
             return _environment.GetAt(location, name.Lexeme);
         }
-    
-        return GlobalEnvironment.Get(name)!;
+        return _environment.Get(name)!;
     }
     public void VisitReturnStmt(Return stmt)
     {
@@ -207,11 +206,11 @@ public sealed class Interpreter : IExprVisitor<object>, IStmtVisitor
 
     public void VisitBlockStmt(Block stmt)
     {
-        // var blockEnv = new LoxEnvironment(size: count, _environment);
+        var blockEnv = new LoxEnvironment(_environment);
         var previousEnv = _environment;
         try
         {
-            // _environment = blockEnv;
+            _environment = blockEnv;
             foreach (var statement in stmt.Statements.OfType<Stmt>())
             {
                 Execute(statement);

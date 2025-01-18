@@ -1,4 +1,4 @@
-namespace SharpLox;
+namespace SharpLox.Extensions;
 
 public static class CharExtensions
 {

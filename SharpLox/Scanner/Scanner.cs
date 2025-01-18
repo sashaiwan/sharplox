@@ -1,3 +1,5 @@
+using SharpLox.Extensions;
+
 namespace SharpLox;
 
 public sealed class Scanner(string source)
